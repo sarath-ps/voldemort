@@ -259,6 +259,10 @@ public class AdminServiceRequestHandler implements RequestHandler {
                 ProtoUtils.writeMessage(outputStream,
                                         handleDeleteStoreRebalanceState(request.getDeleteStoreRebalanceState()));
                 break;
+            case SET_OFFLINE_STATE:
+                ProtoUtils.writeMessage(outputStream,
+                                        handleSetOfflineState(request.getSetOfflineState()));
+                break;
             case REPAIR_JOB:
                 ProtoUtils.writeMessage(outputStream, handleRepairJob(request.getRepairJob()));
                 break;
@@ -319,6 +323,26 @@ public class AdminServiceRequestHandler implements RequestHandler {
                              e);
             }
         }
+        return response.build();
+    }
+
+    public VAdminProto.SetOfflineStateResponse handleSetOfflineState(VAdminProto.SetOfflineStateRequest request) {
+        VAdminProto.SetOfflineStateResponse.Builder response = VAdminProto.SetOfflineStateResponse.newBuilder();
+
+        try {
+            Boolean setOffline = request.getOfflineMode();
+            if(setOffline) {
+                logger.info("Entering OFFLINE_SERVER state from NORMAL_SERVER");
+                metadataStore.enterOfflineState();
+            } else {
+                logger.info("Leaving OFFLINE_SERVER state for NORMAL_SERVER");
+                metadataStore.leaveOfflineState();
+            }
+        } catch(VoldemortException e) {
+            response.setError(ProtoUtils.encodeError(errorCodeMapper, e));
+            logger.error("handleSetOfflineState failed for request(" + request.toString() + ")", e);
+        }
+
         return response.build();
     }
 

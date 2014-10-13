@@ -803,15 +803,22 @@ public class MetadataStore extends AbstractStorageEngine<ByteArray, byte[], byte
         // acquire write lock
         writeLock.lock();
         try {
+            String currentState = ByteUtils.getString(get(SERVER_STATE_KEY, null).get(0).getValue(),
+                                                      "UTF-8");
             // Move into offline state
-            if(ByteUtils.getString(get(SERVER_STATE_KEY, null).get(0).getValue(), "UTF-8")
-                        .compareTo(VoldemortState.NORMAL_SERVER.toString()) == 0) {
+            if(currentState.compareTo(VoldemortState.NORMAL_SERVER.toString()) == 0) {
                 put(SERVER_STATE_KEY, VoldemortState.OFFLINE_SERVER);
                 initCache(SERVER_STATE_KEY);
+                // TODO: disable socket port and http port
+                // TODO: disable fetcher for RO and slop for RW here
+            } else if(currentState.compareTo(VoldemortState.OFFLINE_SERVER.toString()) == 0) {
+                logger.warn("Already in OFFLINE_SERVER state.");
+                return;
+            } else {
+                logger.error("Cannot enter OFFLINE_SERVER state from " + currentState);
+                throw new VoldemortException("Cannot enter OFFLINE_SERVER state from "
+                                             + currentState);
             }
-
-            // TODO: disable socket port and http port
-            // TODO: disable fetcher for RO and slop for RW here
         } finally {
             writeLock.unlock();
         }
@@ -825,21 +832,25 @@ public class MetadataStore extends AbstractStorageEngine<ByteArray, byte[], byte
         // acquire write lock
         writeLock.lock();
         try {
-            // Move into offline state
-            if(ByteUtils.getString(get(SERVER_STATE_KEY, null).get(0).getValue(), "UTF-8")
-                        .compareTo(VoldemortState.OFFLINE_SERVER.toString()) == 0) {
+            String currentState = ByteUtils.getString(get(SERVER_STATE_KEY, null).get(0).getValue(),
+                                                      "UTF-8");
+            // Move out of offline state
+            if(currentState.compareTo(VoldemortState.NORMAL_SERVER.toString()) == 0) {
+                logger.warn("Already in NORMAL_SERVER state.");
+                return;
+            } else if(currentState.compareTo(VoldemortState.OFFLINE_SERVER.toString()) == 0) {
                 put(SERVER_STATE_KEY, VoldemortState.NORMAL_SERVER);
                 initCache(SERVER_STATE_KEY);
+                // Enable socket port and http port
+                // Don't enable admin port->streaming
+                // When leaving OFFLINE_SERVER, we don't enable RO fetcher or RW
+                // slop.
+                init(getNodeId());
+            } else {
+                logger.error("Cannot enter NORMAL_SERVER state from " + currentState);
+                throw new VoldemortException("Cannot enter NORMAL_SERVER state from "
+                                             + currentState);
             }
-
-            // Enable socket port and http port
-
-            // Don't enable admin port->streaming
-            // When leaving OFFLINE_SERVER, we don't enable RO fetcher or RW
-            // slop.
-
-            init(getNodeId());
-
         } finally {
             writeLock.unlock();
         }
